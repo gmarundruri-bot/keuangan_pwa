@@ -1,0 +1,1017 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Catatan Keuangan</title>
+
+<!-- PWA -->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#f3f6f4" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#101915" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Keuangan">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<style>
+  /* ===== Warna (otomatis menyesuaikan mode terang/gelap) ===== */
+  :root {
+    --bg: #f3f6f4; --card: #ffffff; --teks: #17261f; --redup: #5c6e65;
+    --garis: #d7e0db; --hijau: #1f7a55; --merah: #c0392b; --aksen: #1f7a55;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #101915; --card: #18241e; --teks: #e6f0ea; --redup: #93a79c;
+      --garis: #2a3a32; --hijau: #4cc38a; --merah: #ef7b6d; --aksen: #4cc38a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--teks);
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif; line-height: 1.5;
+  }
+  /* max(...) menjaga isi tetap di luar area poni/bilah sistem saat dibuka sebagai aplikasi */
+  .wadah {
+    max-width: 960px; margin: 0 auto;
+    padding: max(20px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))
+             max(48px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  }
+  h1 { font-size: 1.5rem; margin: 0; }
+  .judul { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 8px 0 16px; }
+  #pasang { width: auto; padding: 8px 14px; cursor: pointer; font-weight: 600; background: var(--aksen); color: #fff; border: none; }
+  @media (prefers-color-scheme: dark) { #pasang { color: #0b1a12; } }
+  #pasang[hidden] { display: none; }
+  #statusJaringan { font-size: .85rem; color: var(--redup); }
+  h2 { font-size: 1.05rem; margin: 0 0 12px; }
+
+  /* ===== Ringkasan ===== */
+  .ringkasan { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
+  .kotak { background: var(--card); border: 1px solid var(--garis); border-radius: 10px; padding: 14px 16px; }
+  .ringkasan .label { color: var(--redup); font-size: .85rem; }
+  .ringkasan .nilai { font-size: 1.25rem; font-weight: 700; margin-top: 2px; }
+  #totalMasuk { color: var(--hijau); }
+  #totalKeluar { color: var(--merah); }
+
+  /* ===== Tata letak ===== */
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  @media (max-width: 720px) {
+    .grid { grid-template-columns: 1fr; }
+    .ringkasan { grid-template-columns: 1fr; }
+  }
+
+  /* ===== Form ===== */
+  form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  form .penuh { grid-column: 1 / -1; }
+  label { display: block; font-size: .85rem; color: var(--redup); margin-bottom: 3px; }
+  input, select, button {
+    width: 100%; padding: 9px 10px; font: inherit; color: var(--teks);
+    background: var(--bg); border: 1px solid var(--garis); border-radius: 8px;
+  }
+  input:focus, select:focus, button:focus-visible { outline: 2px solid var(--aksen); outline-offset: 1px; }
+  button.utama { background: var(--aksen); color: #fff; border: none; font-weight: 600; cursor: pointer; }
+  @media (prefers-color-scheme: dark) { button.utama { color: #0b1a12; } }
+  #pesanError { color: var(--merah); font-size: .85rem; min-height: 1.2em; }
+
+  /* ===== Daftar transaksi ===== */
+  .filter { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
+  .filter label { margin: 0; white-space: nowrap; }
+  .filter input { max-width: 190px; }
+  .tabel-bungkus { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: .92rem; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--garis); }
+  th { color: var(--redup); font-weight: 600; }
+  td.angka { text-align: right; white-space: nowrap; font-weight: 600; }
+  .masuk { color: var(--hijau); }
+  .keluar { color: var(--merah); }
+  .hapus { width: auto; padding: 4px 10px; cursor: pointer; color: var(--merah); }
+  .kosong { color: var(--redup); text-align: center; padding: 20px 0; }
+  .grafik-kotak { position: relative; height: 260px; }
+
+  /* ===== Anggaran ===== */
+  .form-anggaran { display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: end; margin-bottom: 14px; }
+  .form-anggaran button { width: auto; padding: 9px 16px; }
+  @media (max-width: 720px) { .form-anggaran { grid-template-columns: 1fr; } .form-anggaran button { width: 100%; } }
+  .item-anggaran { margin-bottom: 12px; }
+  .baris-anggaran { display: flex; justify-content: space-between; gap: 8px; font-size: .9rem; margin-bottom: 4px; }
+  .baris-anggaran .info { color: var(--redup); }
+  .batang { height: 10px; background: var(--garis); border-radius: 6px; overflow: hidden; }
+  .isi { height: 100%; background: var(--hijau); border-radius: 6px; }
+  .isi.hampir { background: #e0a030; }
+  .isi.lewat { background: var(--merah); }
+  .peringatan { font-size: .85rem; margin-top: 3px; }
+  .peringatan.hampir { color: #b57a10; }
+  .peringatan.lewat { color: var(--merah); }
+  @media (prefers-color-scheme: dark) { .peringatan.hampir { color: #e0a030; } }
+  .hapus-kecil { width: auto; padding: 0 8px; background: none; border: none; color: var(--redup); cursor: pointer; }
+
+  /* ===== Toolbar CSV ===== */
+  .toolbar-csv { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 10px; }
+  .toolbar-csv button, .toolbar-csv label.tombol {
+    width: auto; padding: 8px 14px; cursor: pointer; margin: 0; color: var(--teks);
+    background: var(--bg); border: 1px solid var(--garis); border-radius: 8px; font-size: .92rem;
+  }
+  .toolbar-csv input[type=file] { display: none; }
+  #pesanCsv, #pesanCadangan { font-size: .85rem; color: var(--redup); }
+
+  /* ===== Edit & berulang ===== */
+  td.aksi { white-space: nowrap; }
+  .edit { width: auto; padding: 4px 10px; cursor: pointer; }
+  .tombol-batal { cursor: pointer; }
+  .item-berulang { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--garis); font-size: .92rem; }
+  .item-berulang .info { color: var(--redup); }
+  .petunjuk { color: var(--redup); font-size: .85rem; margin: 0 0 12px; }
+</style>
+</head>
+<body>
+<div class="wadah">
+  <div class="judul">
+    <div>
+      <h1>Catatan Keuangan</h1>
+      <span id="statusJaringan" role="status"></span>
+    </div>
+    <button type="button" id="pasang" hidden>Pasang aplikasi</button>
+  </div>
+
+  <!-- Ringkasan -->
+  <div class="ringkasan">
+    <div class="kotak"><div class="label">Pemasukan</div><div class="nilai" id="totalMasuk">Rp0</div></div>
+    <div class="kotak"><div class="label">Pengeluaran</div><div class="nilai" id="totalKeluar">Rp0</div></div>
+    <div class="kotak"><div class="label">Saldo</div><div class="nilai" id="saldo">Rp0</div></div>
+  </div>
+
+  <div class="grid">
+    <!-- Form tambah transaksi -->
+    <section class="kotak">
+      <h2 id="judulForm">Tambah transaksi</h2>
+      <form id="formTransaksi">
+        <div>
+          <label for="tipe">Jenis</label>
+          <select id="tipe">
+            <option value="pengeluaran">Pengeluaran</option>
+            <option value="pemasukan">Pemasukan</option>
+          </select>
+        </div>
+        <div>
+          <label for="tanggal">Tanggal</label>
+          <input type="date" id="tanggal" required>
+        </div>
+        <div>
+          <label for="kategori">Kategori</label>
+          <select id="kategori"></select>
+        </div>
+        <div>
+          <label for="jumlah">Jumlah (Rp)</label>
+          <input type="number" id="jumlah" min="1" step="1" placeholder="25000" required>
+        </div>
+        <div class="penuh">
+          <label for="catatan">Catatan (opsional)</label>
+          <input type="text" id="catatan" placeholder="Makan siang">
+        </div>
+        <div class="penuh" id="pesanError" role="alert"></div>
+        <div class="penuh"><button type="submit" class="utama" id="tombolSimpan">Simpan transaksi</button></div>
+        <div class="penuh"><button type="button" class="tombol-batal" id="batalEdit" hidden>Batal edit</button></div>
+      </form>
+    </section>
+
+    <!-- Grafik per kategori -->
+    <section class="kotak">
+      <h2>Pengeluaran per kategori</h2>
+      <div class="grafik-kotak"><canvas id="grafikKategori"></canvas></div>
+    </section>
+  </div>
+
+  <!-- Grafik per bulan -->
+  <section class="kotak" style="margin-bottom:16px">
+    <h2>Pengeluaran per bulan</h2>
+    <div class="grafik-kotak"><canvas id="grafikBulan"></canvas></div>
+  </section>
+
+  <!-- Anggaran bulanan -->
+  <section class="kotak" style="margin-bottom:16px">
+    <h2>Anggaran bulanan <span id="bulanAnggaran" style="font-weight:400;color:var(--redup)"></span></h2>
+    <div class="form-anggaran">
+      <div>
+        <label for="kategoriAnggaran">Kategori</label>
+        <select id="kategoriAnggaran"></select>
+      </div>
+      <div>
+        <label for="nilaiAnggaran">Batas per bulan (Rp)</label>
+        <input type="number" id="nilaiAnggaran" min="1" step="1" placeholder="500000">
+      </div>
+      <button type="button" id="simpanAnggaran" class="utama">Atur anggaran</button>
+    </div>
+    <div id="daftarAnggaran"></div>
+  </section>
+
+  <!-- Transaksi berulang -->
+  <section class="kotak" style="margin-bottom:16px">
+    <h2>Transaksi berulang</h2>
+    <p class="petunjuk">Dibuat otomatis setiap bulan saat aplikasi dibuka, begitu tanggalnya tiba. Jika bulan itu lebih pendek (misalnya tanggal 31 di bulan Februari), dipakai tanggal terakhir bulan itu.</p>
+    <form id="formBerulang">
+      <div>
+        <label for="berTipe">Jenis</label>
+        <select id="berTipe">
+          <option value="pengeluaran">Pengeluaran</option>
+          <option value="pemasukan">Pemasukan</option>
+        </select>
+      </div>
+      <div>
+        <label for="berKategori">Kategori</label>
+        <select id="berKategori"></select>
+      </div>
+      <div>
+        <label for="berJumlah">Jumlah (Rp)</label>
+        <input type="number" id="berJumlah" min="1" step="1" placeholder="350000" required>
+      </div>
+      <div>
+        <label for="berHari">Tanggal tiap bulan</label>
+        <input type="number" id="berHari" min="1" max="31" step="1" value="1" required>
+      </div>
+      <div>
+        <label for="berMulai">Mulai bulan</label>
+        <input type="month" id="berMulai" required>
+      </div>
+      <div>
+        <label for="berCatatan">Catatan (opsional)</label>
+        <input type="text" id="berCatatan" placeholder="Tagihan listrik">
+      </div>
+      <div class="penuh" id="pesanBerulang" role="alert" style="color:var(--merah);font-size:.85rem;min-height:1.2em"></div>
+      <div class="penuh"><button type="submit" class="utama">Tambah transaksi berulang</button></div>
+    </form>
+    <div id="daftarBerulang" style="margin-top:14px"></div>
+  </section>
+
+  <!-- Daftar transaksi -->
+  <section class="kotak">
+    <h2>Riwayat transaksi</h2>
+    <div class="filter">
+      <label for="filterBulan">Filter bulan</label>
+      <input type="month" id="filterBulan">
+      <button type="button" id="resetFilter" style="width:auto">Semua</button>
+    </div>
+    <div class="toolbar-csv">
+      <button type="button" id="ekspor">Ekspor CSV</button>
+      <label class="tombol" for="impor">Impor CSV</label>
+      <input type="file" id="impor" accept=".csv,text/csv">
+      <span id="pesanCsv" role="status"></span>
+    </div>
+    <p class="petunjuk" style="margin-bottom:6px">Data tersimpan di browser ini saja. Cadangan JSON memuat transaksi, anggaran, dan aturan berulang sekaligus, jadi bisa dipakai untuk pindah perangkat.</p>
+    <div class="toolbar-csv">
+      <button type="button" id="cadangkan">Cadangkan semua data</button>
+      <label class="tombol" for="pulihkan">Pulihkan cadangan</label>
+      <input type="file" id="pulihkan" accept=".json,application/json">
+      <span id="pesanCadangan" role="status"></span>
+    </div>
+    <div class="tabel-bungkus">
+      <table>
+        <thead>
+          <tr><th>Tanggal</th><th>Kategori</th><th>Catatan</th><th style="text-align:right">Jumlah</th><th></th></tr>
+        </thead>
+        <tbody id="daftar"></tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<script src="chart.umd.js"></script>
+<script>
+/* ============================================================
+   1. DATA & PENYIMPANAN
+   Semua transaksi disimpan dalam array, lalu disalin ke localStorage
+   supaya tidak hilang saat halaman ditutup.
+   ============================================================ */
+const KUNCI = "transaksi";
+let transaksi = [];
+try { transaksi = JSON.parse(localStorage.getItem(KUNCI)) || []; } catch (e) { transaksi = []; }
+
+function simpan() {
+  try { localStorage.setItem(KUNCI, JSON.stringify(transaksi)); } catch (e) { /* abaikan */ }
+}
+
+const KATEGORI = {
+  pengeluaran: ["Makanan", "Transportasi", "Belanja", "Tagihan", "Hiburan", "Kesehatan", "Lainnya"],
+  pemasukan: ["Gaji", "Uang saku", "Bonus", "Usaha", "Lainnya"]
+};
+
+/* ============================================================
+   2. FUNGSI BANTU
+   ============================================================ */
+const rp = n => new Intl.NumberFormat("id-ID", {
+  style: "currency", currency: "IDR", maximumFractionDigits: 0
+}).format(n);
+
+const hariIni = () => {
+  const d = new Date();
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); // sesuaikan zona waktu lokal
+  return d.toISOString().slice(0, 10);
+};
+
+const namaBulan = ym => {
+  const [y, m] = ym.split("-");
+  return new Date(y, m - 1, 1).toLocaleDateString("id-ID", { month: "short", year: "numeric" });
+};
+
+const el = id => document.getElementById(id);
+
+/* ============================================================
+   3. TAMBAH & HAPUS TRANSAKSI
+   ============================================================ */
+function tambahTransaksi(data) {
+  transaksi.push({ id: Date.now(), ...data });
+  simpan();
+  render();
+}
+
+function hapusTransaksi(id) {
+  transaksi = transaksi.filter(t => t.id !== id);
+  simpan();
+  render();
+}
+
+/* ============================================================
+   4. OLAH DATA UNTUK RINGKASAN & GRAFIK
+   ============================================================ */
+function pengeluaranPerBulan() {
+  const hasil = {};
+  transaksi.filter(t => t.tipe === "pengeluaran").forEach(t => {
+    const bulan = t.tanggal.slice(0, 7); // "2026-11"
+    hasil[bulan] = (hasil[bulan] || 0) + t.jumlah;
+  });
+  // urutkan berdasarkan bulan
+  return Object.fromEntries(Object.entries(hasil).sort(([a], [b]) => a.localeCompare(b)));
+}
+
+function pengeluaranPerKategori(daftar) {
+  const hasil = {};
+  daftar.filter(t => t.tipe === "pengeluaran").forEach(t => {
+    hasil[t.kategori] = (hasil[t.kategori] || 0) + t.jumlah;
+  });
+  return hasil;
+}
+
+function transaksiTerfilter() {
+  const bulan = el("filterBulan").value;
+  const daftar = bulan ? transaksi.filter(t => t.tanggal.startsWith(bulan)) : [...transaksi];
+  return daftar.sort((a, b) => b.tanggal.localeCompare(a.tanggal) || b.id - a.id);
+}
+
+/* ============================================================
+   5. TAMPILAN
+   ============================================================ */
+function renderRingkasan(daftar) {
+  const masuk = daftar.filter(t => t.tipe === "pemasukan").reduce((s, t) => s + t.jumlah, 0);
+  const keluar = daftar.filter(t => t.tipe === "pengeluaran").reduce((s, t) => s + t.jumlah, 0);
+  el("totalMasuk").textContent = rp(masuk);
+  el("totalKeluar").textContent = rp(keluar);
+  el("saldo").textContent = rp(masuk - keluar);
+}
+
+function renderDaftar(daftar) {
+  const tbody = el("daftar");
+  tbody.innerHTML = "";
+  if (daftar.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" class="kosong">Belum ada transaksi. Tambahkan lewat form di atas.</td></tr>';
+    return;
+  }
+  daftar.forEach(t => {
+    const tr = document.createElement("tr");
+    const tanda = t.tipe === "pemasukan" ? "+" : "−";
+    tr.innerHTML = `
+      <td>${t.tanggal}</td>
+      <td></td>
+      <td></td>
+      <td class="angka ${t.tipe === "pemasukan" ? "masuk" : "keluar"}">${tanda} ${rp(t.jumlah)}</td>
+      <td class="aksi">
+        <button class="edit" aria-label="Edit transaksi">Edit</button>
+        <button class="hapus" aria-label="Hapus transaksi">Hapus</button>
+      </td>`;
+    // textContent dipakai agar teks dari pengguna aman (tidak dijalankan sebagai HTML)
+    tr.children[1].textContent = t.kategori + (t.berulangId ? " (berulang)" : "");
+    tr.children[2].textContent = t.catatan || "-";
+    tr.querySelector(".edit").addEventListener("click", () => mulaiEdit(t));
+    tr.querySelector(".hapus").addEventListener("click", () => {
+      if (sedangEdit === t.id) selesaiEdit(); // batalkan mode edit jika yang diedit dihapus
+      hapusTransaksi(t.id);
+    });
+    tbody.appendChild(tr);
+  });
+}
+
+/* ============================================================
+   6. GRAFIK (Chart.js)
+   ============================================================ */
+let grafikBulan, grafikKategori;
+const WARNA = ["#1f7a55", "#e0a030", "#c0392b", "#3b7dd8", "#8e5bd0", "#2aa5a5", "#8a8f94"];
+
+function renderGrafik(daftar) {
+  if (typeof Chart === "undefined") return; // jika CDN gagal dimuat
+  const gaya = getComputedStyle(document.documentElement);
+  Chart.defaults.color = gaya.getPropertyValue("--redup").trim();
+  Chart.defaults.borderColor = gaya.getPropertyValue("--garis").trim();
+
+  // --- Per bulan ---
+  const dataBulan = pengeluaranPerBulan();
+  if (grafikBulan) grafikBulan.destroy();
+  grafikBulan = new Chart(el("grafikBulan"), {
+    type: "bar",
+    data: {
+      labels: Object.keys(dataBulan).map(namaBulan),
+      datasets: [{ label: "Pengeluaran", data: Object.values(dataBulan), backgroundColor: WARNA[0], borderRadius: 4 }]
+    },
+    options: {
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => rp(c.parsed.y) } } },
+      scales: { y: { beginAtZero: true, ticks: { callback: v => rp(v) } } }
+    }
+  });
+
+  // --- Per kategori (mengikuti filter bulan) ---
+  const dataKat = pengeluaranPerKategori(daftar);
+  if (grafikKategori) grafikKategori.destroy();
+  grafikKategori = new Chart(el("grafikKategori"), {
+    type: "doughnut",
+    data: {
+      labels: Object.keys(dataKat),
+      datasets: [{ data: Object.values(dataKat), backgroundColor: WARNA, borderWidth: 0 }]
+    },
+    options: {
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: "bottom" },
+        tooltip: { callbacks: { label: c => `${c.label}: ${rp(c.parsed)}` } }
+      }
+    }
+  });
+}
+
+/* ============================================================
+   6b. ANGGARAN BULANAN PER KATEGORI
+   Disimpan sebagai object { "Makanan": 500000, ... } di localStorage.
+   Pemakaian dihitung untuk bulan yang dipilih di filter
+   (atau bulan ini jika filter kosong).
+   ============================================================ */
+const KUNCI_ANGGARAN = "anggaran";
+let anggaran = {};
+try { anggaran = JSON.parse(localStorage.getItem(KUNCI_ANGGARAN)) || {}; } catch (e) { anggaran = {}; }
+
+function simpanAnggaran() {
+  try { localStorage.setItem(KUNCI_ANGGARAN, JSON.stringify(anggaran)); } catch (e) { /* abaikan */ }
+}
+
+function renderAnggaran() {
+  const bulan = el("filterBulan").value || hariIni().slice(0, 7);
+  el("bulanAnggaran").textContent = "· " + namaBulan(bulan);
+
+  // total pengeluaran per kategori pada bulan tersebut
+  const terpakai = pengeluaranPerKategori(transaksi.filter(t => t.tanggal.startsWith(bulan)));
+  const wadah = el("daftarAnggaran");
+  wadah.innerHTML = "";
+
+  const kategoriAda = Object.keys(anggaran);
+  if (kategoriAda.length === 0) {
+    wadah.innerHTML = '<div class="kosong">Belum ada anggaran. Pilih kategori dan isi batasnya di atas.</div>';
+    return;
+  }
+
+  kategoriAda.forEach(kat => {
+    const batas = anggaran[kat];
+    const pakai = terpakai[kat] || 0;
+    const persen = Math.round((pakai / batas) * 100);
+    const status = persen > 100 ? "lewat" : persen >= 80 ? "hampir" : "";
+
+    const item = document.createElement("div");
+    item.className = "item-anggaran";
+    item.innerHTML = `
+      <div class="baris-anggaran">
+        <strong></strong>
+        <span class="info"></span>
+      </div>
+      <div class="batang"><div class="isi ${status}" style="width:${Math.min(persen, 100)}%"></div></div>
+      <div class="peringatan ${status}"></div>`;
+    item.querySelector("strong").textContent = kat;
+    item.querySelector(".info").textContent = `${rp(pakai)} dari ${rp(batas)} (${persen}%)`;
+
+    if (status === "lewat") {
+      item.querySelector(".peringatan").textContent = `Melebihi anggaran sebesar ${rp(pakai - batas)}.`;
+    } else if (status === "hampir") {
+      item.querySelector(".peringatan").textContent = `Hampir habis, sisa ${rp(batas - pakai)}.`;
+    }
+
+    const tombol = document.createElement("button");
+    tombol.type = "button";
+    tombol.className = "hapus-kecil";
+    tombol.textContent = "Hapus";
+    tombol.setAttribute("aria-label", "Hapus anggaran " + kat);
+    tombol.addEventListener("click", () => { delete anggaran[kat]; simpanAnggaran(); renderAnggaran(); });
+    item.querySelector(".baris-anggaran").appendChild(tombol);
+
+    wadah.appendChild(item);
+  });
+}
+
+/* ============================================================
+   6c. EKSPOR & IMPOR CSV
+   Format kolom: tanggal,tipe,kategori,jumlah,catatan
+   ============================================================ */
+function sel(teks) {
+  let s = String(teks ?? "");
+  if (/^[=+\-@]/.test(s)) s = "'" + s;           // cegah rumus berbahaya saat dibuka di Excel
+  return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+
+function eksporCSV() {
+  const baris = [["tanggal", "tipe", "kategori", "jumlah", "catatan"].join(",")];
+  [...transaksi].sort((a, b) => a.tanggal.localeCompare(b.tanggal)).forEach(t => {
+    baris.push([t.tanggal, t.tipe, sel(t.kategori), t.jumlah, sel(t.catatan)].join(","));
+  });
+  const blob = new Blob(["\uFEFF" + baris.join("\r\n")], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `keuangan-${hariIni()}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  el("pesanCsv").textContent = `${transaksi.length} transaksi diekspor.`;
+}
+
+// Parser CSV sederhana yang mengerti tanda kutip
+function parseCSV(teks) {
+  const hasil = [];
+  let baris = [], kolom = "", kutip = false;
+  const tutupBaris = () => {
+    baris.push(kolom); kolom = "";
+    if (baris.some(x => x !== "")) hasil.push(baris);
+    baris = [];
+  };
+  for (let i = 0; i < teks.length; i++) {
+    const c = teks[i];
+    if (kutip) {
+      if (c === '"') {
+        if (teks[i + 1] === '"') { kolom += '"'; i++; } else kutip = false;
+      } else kolom += c;
+    } else if (c === '"') kutip = true;
+    else if (c === ",") { baris.push(kolom); kolom = ""; }
+    else if (c === "\n" || c === "\r") { if (c === "\r" && teks[i + 1] === "\n") i++; tutupBaris(); }
+    else kolom += c;
+  }
+  tutupBaris();
+  return hasil;
+}
+
+// Dua transaksi dianggap sama jika semua isinya sama persis
+const kunciTransaksi = t => [t.tanggal, t.tipe, t.kategori, t.jumlah, t.catatan || ""].join("|");
+
+function imporCSV(teks) {
+  const data = parseCSV(teks.replace(/^\uFEFF/, ""));
+  if (data.length && data[0][0].trim().toLowerCase() === "tanggal") data.shift(); // lewati header
+
+  let berhasil = 0, dilewati = 0, duplikat = 0;
+  const sudahAda = new Map(); // kunci → berapa transaksi yang sama persis sudah tersimpan
+  transaksi.forEach(t => sudahAda.set(kunciTransaksi(t), (sudahAda.get(kunciTransaksi(t)) || 0) + 1));
+  data.forEach(([tanggal, tipe, kategori, jumlah, catatan], i) => {
+    tanggal = (tanggal || "").trim();
+    tipe = (tipe || "").trim().toLowerCase();
+    const nilai = Number((jumlah || "").trim());
+    const valid = /^\d{4}-\d{2}-\d{2}$/.test(tanggal) &&
+                  (tipe === "pemasukan" || tipe === "pengeluaran") &&
+                  Number.isFinite(nilai) && nilai > 0;
+    if (!valid) { dilewati++; return; }
+    const baru = {
+      id: Date.now() + i,
+      tanggal, tipe, jumlah: nilai,
+      kategori: (kategori || "").trim() || "Lainnya",
+      catatan: (catatan || "").trim().replace(/^'(?=[=+\-@])/, "")
+    };
+    // Lewati baris yang sudah ada persis sama. Dihitung per kemunculan, jadi dua
+    // transaksi kembar yang memang sah (misalnya dua kopi di hari yang sama) tidak ikut terbuang.
+    const kunci = kunciTransaksi(baru);
+    if (sudahAda.get(kunci) > 0) { sudahAda.set(kunci, sudahAda.get(kunci) - 1); duplikat++; return; }
+    transaksi.push(baru);
+    berhasil++;
+  });
+  simpan();
+  render();
+  const hasil = [`${berhasil} transaksi diimpor`];
+  if (duplikat) hasil.push(`${duplikat} duplikat dilewati`);
+  if (dilewati) hasil.push(`${dilewati} baris tidak valid dilewati`);
+  el("pesanCsv").textContent = hasil.join(", ") + ".";
+}
+
+/* ============================================================
+   6d. EDIT TRANSAKSI
+   Form yang sama dipakai ulang: saat sedangEdit berisi id,
+   tombol simpan memperbarui transaksi itu, bukan menambah baru.
+   ============================================================ */
+let sedangEdit = null;
+
+function mulaiEdit(t) {
+  sedangEdit = t.id;
+  el("tipe").value = t.tipe;
+  isiKategori();
+  // jika kategori berasal dari impor CSV dan tidak ada di daftar, tambahkan sebagai opsi
+  if (![...el("kategori").options].some(o => o.value === t.kategori)) {
+    const o = document.createElement("option");
+    o.textContent = t.kategori;
+    el("kategori").appendChild(o);
+  }
+  el("kategori").value = t.kategori;
+  el("tanggal").value = t.tanggal;
+  el("jumlah").value = t.jumlah;
+  el("catatan").value = t.catatan || "";
+  el("pesanError").textContent = "";
+  el("judulForm").textContent = "Edit transaksi";
+  el("tombolSimpan").textContent = "Simpan perubahan";
+  el("batalEdit").hidden = false;
+  el("formTransaksi").scrollIntoView({ behavior: "smooth", block: "center" });
+  el("jumlah").focus();
+}
+
+function selesaiEdit() {
+  sedangEdit = null;
+  el("jumlah").value = "";
+  el("catatan").value = "";
+  el("tanggal").value = hariIni();
+  el("pesanError").textContent = "";
+  el("judulForm").textContent = "Tambah transaksi";
+  el("tombolSimpan").textContent = "Simpan transaksi";
+  el("batalEdit").hidden = true;
+}
+
+/* ============================================================
+   6e. TRANSAKSI BERULANG
+   Setiap aturan menyimpan "terakhir" = bulan terakhir yang sudah dibuatkan
+   transaksinya. Saat aplikasi dibuka, bulan-bulan yang terlewat
+   dibuatkan satu per satu sampai tanggalnya melewati hari ini.
+   ============================================================ */
+const KUNCI_BERULANG = "berulang";
+let berulang = [];
+try { berulang = JSON.parse(localStorage.getItem(KUNCI_BERULANG)) || []; } catch (e) { berulang = []; }
+
+function simpanBerulang() {
+  try { localStorage.setItem(KUNCI_BERULANG, JSON.stringify(berulang)); } catch (e) { /* abaikan */ }
+}
+
+// Geser bulan "YYYY-MM" sebanyak n bulan (bisa negatif)
+function geserBulan(ym, n) {
+  const [y, m] = ym.split("-").map(Number);
+  const d = new Date(y, m - 1 + n, 1);
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
+}
+
+// Tanggal lengkap pada bulan tertentu; dipotong ke hari terakhir bulan itu bila perlu
+function tanggalDiBulan(ym, hari) {
+  const [y, m] = ym.split("-").map(Number);
+  const akhir = new Date(y, m, 0).getDate();
+  return ym + "-" + String(Math.min(hari, akhir)).padStart(2, "0");
+}
+
+let urutanId = 0;
+function buatTransaksiBerulang() {
+  const sekarang = hariIni();
+  let adaPerubahan = false;
+
+  berulang.forEach(b => {
+    let bulan = geserBulan(b.terakhir, 1);
+    for (let aman = 0; aman < 600; aman++) {      // batas pengaman agar tidak berputar tanpa akhir
+      const tgl = tanggalDiBulan(bulan, b.hari);
+      if (tgl > sekarang) break;                  // belum jatuh tempo
+      // Pengaman: jangan buat lagi jika transaksi untuk aturan dan tanggal ini sudah ada
+      const sudahAda = transaksi.some(t => t.berulangId === b.id && t.tanggal === tgl);
+      if (!sudahAda) {
+        transaksi.push({
+          id: Date.now() * 1000 + (urutanId++ % 1000),
+          tanggal: tgl, tipe: b.tipe, kategori: b.kategori,
+          jumlah: b.jumlah, catatan: b.catatan, berulangId: b.id
+        });
+      }
+      b.terakhir = bulan;
+      adaPerubahan = true;
+      bulan = geserBulan(bulan, 1);
+    }
+  });
+
+  if (adaPerubahan) { simpan(); simpanBerulang(); }
+}
+
+function renderBerulang() {
+  const wadah = el("daftarBerulang");
+  wadah.innerHTML = "";
+  if (berulang.length === 0) {
+    wadah.innerHTML = '<div class="kosong">Belum ada transaksi berulang.</div>';
+    return;
+  }
+  berulang.forEach(b => {
+    const item = document.createElement("div");
+    item.className = "item-berulang";
+    item.innerHTML = '<div><strong></strong><div class="info"></div></div>';
+    item.querySelector("strong").textContent =
+      `${b.catatan || b.kategori}: ${b.tipe === "pemasukan" ? "+" : "−"} ${rp(b.jumlah)}`;
+    item.querySelector(".info").textContent =
+      `${b.kategori}, tiap tanggal ${b.hari}, sejak ${namaBulan(b.mulai)}`;
+
+    const tombol = document.createElement("button");
+    tombol.type = "button";
+    tombol.className = "hapus";
+    tombol.textContent = "Hentikan";
+    tombol.setAttribute("aria-label", "Hentikan transaksi berulang " + (b.catatan || b.kategori));
+    tombol.addEventListener("click", () => {
+      berulang = berulang.filter(x => x.id !== b.id);  // transaksi yang sudah dibuat tetap ada
+      simpanBerulang();
+      renderBerulang();
+    });
+    item.appendChild(tombol);
+    wadah.appendChild(item);
+  });
+}
+
+/* ============================================================
+   6f. SINKRONISASI TAB & CADANGAN DATA
+   - Tab yang berbeda saling memperbarui lewat event "storage",
+     sehingga tidak saling menimpa data.
+   - Cadangan JSON memuat semua data dan bisa dipulihkan di perangkat lain.
+   ============================================================ */
+function bacaStorage(kunci, cadangan) {
+  try {
+    const nilai = JSON.parse(localStorage.getItem(kunci));
+    return nilai === null || nilai === undefined ? cadangan : nilai;
+  } catch (e) { return cadangan; }   // jika storage tidak bisa dibaca, pertahankan data di memori
+}
+
+function muatDariStorage() {
+  transaksi = bacaStorage(KUNCI, transaksi);
+  anggaran = bacaStorage(KUNCI_ANGGARAN, anggaran);
+  berulang = bacaStorage(KUNCI_BERULANG, berulang);
+  if (!Array.isArray(transaksi)) transaksi = [];
+  if (!Array.isArray(berulang)) berulang = [];
+  if (!anggaran || typeof anggaran !== "object") anggaran = {};
+}
+
+// Cek transaksi berulang yang jatuh tempo, dengan data terbaru dari storage
+function periksaBerulang() {
+  muatDariStorage();
+  const sebelum = transaksi.length;
+  buatTransaksiBerulang();
+  if (transaksi.length !== sebelum) render();
+}
+
+const POLA_TANGGAL = /^\d{4}-\d{2}-\d{2}$/;
+const POLA_BULAN = /^\d{4}-\d{2}$/;
+const pesanCadangan = teks => { el("pesanCadangan").textContent = teks; };
+
+function cadangkanData() {
+  const isi = {
+    aplikasi: "catatan-keuangan", versi: 1, diekspor: new Date().toISOString(),
+    transaksi, anggaran, berulang
+  };
+  const blob = new Blob([JSON.stringify(isi, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `cadangan-keuangan-${hariIni()}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  pesanCadangan("Cadangan diunduh.");
+}
+
+function pulihkanData(teks) {
+  let isi;
+  try { isi = JSON.parse(teks); } catch (e) { pesanCadangan("Berkas bukan JSON yang valid."); return; }
+  if (!isi || isi.aplikasi !== "catatan-keuangan" || !Array.isArray(isi.transaksi)) {
+    pesanCadangan("Berkas ini bukan cadangan dari aplikasi ini.");
+    return;
+  }
+
+  // Bersihkan data: hanya entri yang bentuknya valid yang diterima
+  const t = isi.transaksi
+    .filter(x => x && POLA_TANGGAL.test(x.tanggal) && (x.tipe === "pemasukan" || x.tipe === "pengeluaran") &&
+                 Number.isFinite(x.jumlah) && x.jumlah > 0 && typeof x.kategori === "string")
+    .map(x => ({
+      id: Number.isFinite(x.id) ? x.id : Date.now() * 1000 + (urutanId++ % 1000),
+      tanggal: x.tanggal, tipe: x.tipe, kategori: x.kategori, jumlah: x.jumlah,
+      catatan: typeof x.catatan === "string" ? x.catatan : "",
+      ...(x.berulangId ? { berulangId: x.berulangId } : {})
+    }));
+
+  const a = Object.fromEntries(
+    Object.entries(isi.anggaran && typeof isi.anggaran === "object" ? isi.anggaran : {})
+      .filter(([, v]) => Number.isFinite(v) && v > 0)
+  );
+
+  const b = (Array.isArray(isi.berulang) ? isi.berulang : [])
+    .filter(x => x && Number.isFinite(x.id) && (x.tipe === "pemasukan" || x.tipe === "pengeluaran") &&
+                 typeof x.kategori === "string" && Number.isFinite(x.jumlah) && x.jumlah > 0 &&
+                 Number.isInteger(x.hari) && x.hari >= 1 && x.hari <= 31 &&
+                 POLA_BULAN.test(x.mulai) && POLA_BULAN.test(x.terakhir))
+    .map(x => ({
+      id: x.id, tipe: x.tipe, kategori: x.kategori, jumlah: x.jumlah, hari: x.hari,
+      mulai: x.mulai, terakhir: x.terakhir,
+      catatan: typeof x.catatan === "string" ? x.catatan : ""
+    }));
+
+  const ringkas = `${t.length} transaksi, ${Object.keys(a).length} anggaran, ${b.length} transaksi berulang`;
+  if (!confirm(`Ganti SEMUA data saat ini dengan cadangan ini?\n\n${ringkas}`)) return;
+
+  transaksi = t; anggaran = a; berulang = b;
+  simpan(); simpanAnggaran(); simpanBerulang();
+  selesaiEdit();
+  render();
+  pesanCadangan(`Dipulihkan: ${ringkas}.`);
+}
+
+/* ============================================================
+   7. RENDER UTAMA — dipanggil setiap data berubah
+   ============================================================ */
+function render() {
+  const daftar = transaksiTerfilter();
+  renderRingkasan(daftar);
+  renderDaftar(daftar);
+  renderGrafik(daftar);
+  renderAnggaran();
+  renderBerulang();
+}
+
+/* ============================================================
+   8. EVENT & INISIALISASI
+   ============================================================ */
+function isiKategori() {
+  const tipe = el("tipe").value;
+  el("kategori").innerHTML = KATEGORI[tipe].map(k => `<option>${k}</option>`).join("");
+}
+
+el("tipe").addEventListener("change", isiKategori);
+el("filterBulan").addEventListener("change", render);
+el("resetFilter").addEventListener("click", () => { el("filterBulan").value = ""; render(); });
+
+el("formTransaksi").addEventListener("submit", e => {
+  e.preventDefault();
+  const jumlah = Number(el("jumlah").value);
+  const tanggal = el("tanggal").value;
+  const pesan = el("pesanError");
+
+  // Validasi
+  if (!tanggal) { pesan.textContent = "Pilih tanggal transaksi."; return; }
+  if (!Number.isFinite(jumlah) || jumlah <= 0) { pesan.textContent = "Jumlah harus lebih dari 0."; return; }
+  pesan.textContent = "";
+
+  const data = {
+    tipe: el("tipe").value,
+    tanggal,
+    kategori: el("kategori").value,
+    jumlah,
+    catatan: el("catatan").value.trim()
+  };
+
+  if (sedangEdit !== null) {
+    // mode edit: perbarui transaksi yang dipilih, id dan penanda berulang tetap
+    transaksi = transaksi.map(t => t.id === sedangEdit ? { ...t, ...data } : t);
+    simpan();
+    selesaiEdit();
+    render();
+  } else {
+    tambahTransaksi(data);
+    el("jumlah").value = "";
+    el("catatan").value = "";
+  }
+});
+
+el("batalEdit").addEventListener("click", selesaiEdit);
+
+// --- Anggaran ---
+el("kategoriAnggaran").innerHTML = KATEGORI.pengeluaran.map(k => `<option>${k}</option>`).join("");
+el("simpanAnggaran").addEventListener("click", () => {
+  const nilai = Number(el("nilaiAnggaran").value);
+  if (!Number.isFinite(nilai) || nilai <= 0) { el("nilaiAnggaran").focus(); return; }
+  anggaran[el("kategoriAnggaran").value] = nilai;
+  simpanAnggaran();
+  el("nilaiAnggaran").value = "";
+  renderAnggaran();
+});
+
+// --- CSV ---
+el("ekspor").addEventListener("click", eksporCSV);
+el("impor").addEventListener("change", e => {
+  const berkas = e.target.files[0];
+  if (!berkas) return;
+  const pembaca = new FileReader();
+  pembaca.onload = () => imporCSV(String(pembaca.result));
+  pembaca.onerror = () => { el("pesanCsv").textContent = "Berkas tidak bisa dibaca."; };
+  pembaca.readAsText(berkas);
+  e.target.value = ""; // supaya berkas yang sama bisa diimpor lagi
+});
+
+// --- Transaksi berulang ---
+function isiKategoriBerulang() {
+  el("berKategori").innerHTML = KATEGORI[el("berTipe").value].map(k => `<option>${k}</option>`).join("");
+}
+el("berTipe").addEventListener("change", isiKategoriBerulang);
+
+el("formBerulang").addEventListener("submit", e => {
+  e.preventDefault();
+  const jumlah = Number(el("berJumlah").value);
+  const hari = Number(el("berHari").value);
+  const mulai = el("berMulai").value;
+  const pesan = el("pesanBerulang");
+
+  if (!Number.isFinite(jumlah) || jumlah <= 0) { pesan.textContent = "Jumlah harus lebih dari 0."; return; }
+  if (!Number.isInteger(hari) || hari < 1 || hari > 31) { pesan.textContent = "Tanggal harus antara 1 dan 31."; return; }
+  if (!mulai) { pesan.textContent = "Pilih bulan mulai."; return; }
+  pesan.textContent = "";
+
+  berulang.push({
+    id: Date.now(),
+    tipe: el("berTipe").value,
+    kategori: el("berKategori").value,
+    jumlah, hari, mulai,
+    catatan: el("berCatatan").value.trim(),
+    terakhir: geserBulan(mulai, -1)   // belum ada transaksi yang dibuat
+  });
+  simpanBerulang();
+  buatTransaksiBerulang();            // langsung buat yang sudah jatuh tempo
+  el("berJumlah").value = "";
+  el("berCatatan").value = "";
+  render();
+});
+
+el("berMulai").value = hariIni().slice(0, 7);
+isiKategoriBerulang();
+buatTransaksiBerulang();              // buat transaksi yang terlewat sejak aplikasi terakhir dibuka
+
+// --- Cadangan data ---
+el("cadangkan").addEventListener("click", cadangkanData);
+el("pulihkan").addEventListener("change", e => {
+  const berkas = e.target.files[0];
+  if (!berkas) return;
+  const pembaca = new FileReader();
+  pembaca.onload = () => pulihkanData(String(pembaca.result));
+  pembaca.onerror = () => pesanCadangan("Berkas tidak bisa dibaca.");
+  pembaca.readAsText(berkas);
+  e.target.value = "";
+});
+
+// --- Sinkronisasi antar tab: tab lain mengubah data → muat ulang di sini ---
+window.addEventListener("storage", e => {
+  if (e.key !== null && ![KUNCI, KUNCI_ANGGARAN, KUNCI_BERULANG].includes(e.key)) return;
+  muatDariStorage();
+  if (sedangEdit !== null && !transaksi.some(t => t.id === sedangEdit)) selesaiEdit();
+  render();
+});
+
+// --- Transaksi berulang tetap muncul walau tab dibiarkan terbuka ---
+document.addEventListener("visibilitychange", () => { if (!document.hidden) periksaBerulang(); });
+setInterval(periksaBerulang, 60 * 1000);   // cek tiap menit, murah karena hanya memeriksa aturan berulang
+
+// Minta browser agar tidak menghapus data otomatis saat ruang penyimpanan menipis
+try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {}); } catch (e) { /* abaikan */ }
+
+/* ============================================================
+   9. PWA — bisa dipasang dan dipakai offline
+   ============================================================ */
+// 1. Service worker. Hanya berjalan lewat https:// atau localhost, bukan file://
+if ("serviceWorker" in navigator &&
+    (location.protocol === "https:" || ["localhost", "127.0.0.1"].includes(location.hostname))) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("sw.js")
+      .catch(err => console.warn("Service worker gagal didaftarkan:", err));
+  });
+}
+
+// 2. Tombol "Pasang aplikasi". Browser (Chrome/Edge/Android) mengirim event ini saat aplikasi memenuhi syarat.
+//    Safari di iOS tidak punya event ini: pasang lewat Bagikan → Tambah ke Layar Utama.
+let promptPasang = null;
+window.addEventListener("beforeinstallprompt", e => {
+  e.preventDefault();               // tahan dialog bawaan, tampilkan lewat tombol kita
+  promptPasang = e;
+  el("pasang").hidden = false;
+});
+el("pasang").addEventListener("click", async () => {
+  if (!promptPasang) return;
+  promptPasang.prompt();
+  await promptPasang.userChoice;
+  promptPasang = null;
+  el("pasang").hidden = true;
+});
+window.addEventListener("appinstalled", () => { promptPasang = null; el("pasang").hidden = true; });
+
+// 3. Penanda saat offline
+function perbaruiStatus() {
+  el("statusJaringan").textContent = navigator.onLine ? "" : "Mode offline, data tetap tersimpan di perangkat ini.";
+}
+window.addEventListener("online", perbaruiStatus);
+window.addEventListener("offline", perbaruiStatus);
+perbaruiStatus();
+
+// 4. Pintasan "Tambah transaksi" dari ikon aplikasi (lihat shortcuts di manifest)
+if (location.hash === "#tambah") el("jumlah").focus();
+
+el("tanggal").value = hariIni();
+isiKategori();
+render();
+</script>
+</body>
+</html>
